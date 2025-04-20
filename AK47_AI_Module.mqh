@@ -7,10 +7,10 @@
 #property link      "https://github.com/JonusNattapong"
 #property version   "1.00"
 
-// Include necessary files
+// Include necessary files for LSTM implementation
 #include <Arrays\ArrayObj.mqh>
 #include <Math\Stat\Math.mqh>
-#include <Math\Alglib\alglib.mqh>
+#include <MachineLearning\LSTM.mqh>
 
 // AI Module for Signal Generation
 class CAK47AIModule
@@ -29,14 +29,17 @@ private:
     double          m_atrData[];        // ATR data
     
     // Neural network variables (simplified)
-    double          m_weights[10][5];   // Weights matrix for simple neural network
-    double          m_bias[10];         // Bias values
+// LSTM model parameters
+#define INPUT_SIZE 5      // Number of input features
+#define HIDDEN_SIZE 32    // Number of LSTM hidden units
+#define OUTPUT_SIZE 1     // Single output for signal prediction
+
+CLSTM*          m_lstmModel;          // LSTM model instance
     
-    // Private methods
+// Private methods
     void            CalculateIndicators();
-    double          NormalizeData(double value, double min, double max);
-    void            TrainModel();
-    double          ActivationFunction(double x);
+    void            PrepareTrainingData();
+    void            TrainLSTMModel();
     
 public:
                     CAK47AIModule(int period, double threshold, int historyBars);
@@ -64,23 +67,16 @@ CAK47AIModule::CAK47AIModule(int period, double threshold, int historyBars)
     ArrayResize(m_momData, m_historyBars);
     ArrayResize(m_atrData, m_historyBars);
     
-    // Initialize weights with small random values
-    for(int i = 0; i < 10; i++)
-    {
-        for(int j = 0; j < 5; j++)
-        {
-            m_weights[i][j] = 0.1 * (MathRand() / 32767.0) - 0.05;
-        }
-        m_bias[i] = 0.1 * (MathRand() / 32767.0) - 0.05;
-    }
+// Create and initialize LSTM model
+m_lstmModel = new CLSTM(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
     
-    // Initial calculation of indicators
-    CalculateIndicators();
+// Initial calculation of indicators
+CalculateIndicators();
     
-    // Initial training
-    TrainModel();
+// Initial training
+TrainLSTMModel();
     
-    Print("AI Module initialized with period: ", period, " threshold: ", threshold);
+Print("AI Module initialized with period: ", period, " threshold: ", threshold);
 }
 
 //+------------------------------------------------------------------+
@@ -279,8 +275,9 @@ void CAK47AIModule::UpdateModel()
     // Recalculate indicators with latest data
     CalculateIndicators();
     
-    // Retrain model with updated data
-    TrainModel();
+    // Retrain LSTM model with updated data
+// Retrain LSTM model with updated data
+TrainLSTMModel();
 }
 
 //+------------------------------------------------------------------+
@@ -318,31 +315,19 @@ double CAK47AIModule::GetSignal()
     features[2] = NormalizeData(currentBoll, m_bollData[ArrayMinimum(m_bollData, 0, m_historyBars)], m_bollData[ArrayMaximum(m_bollData, 0, m_historyBars)]);
     features[3] = NormalizeData(currentMom, minMom, maxMom);
     features[4] = NormalizeData(currentATR, minATR, maxATR);
-    
-    // Forward pass to get prediction
-    double neuronOutputs[10];
-    for(int j = 0; j < 10; j++)
-    {
-        neuronOutputs[j] = 0;
-        for(int k = 0; k < 5; k++)
-        {
-            neuronOutputs[j] += features[k] * m_weights[j][k];
-        }
-        neuronOutputs[j] = ActivationFunction(neuronOutputs[j] + m_bias[j]);
-    }
-    
-    // Output layer (simplified to a single value)
-    double output = 0;
-    for(int j = 0; j < 10; j++)
-    {
-        output += neuronOutputs[j];
-    }
-    output = output / 10.0; // Simple average
-    
-    // Convert from [0,1] to [-1,1] range
-    double signal = (output - 0.5) * 2.0;
-    
-    return signal;
+
+// Use LSTM model to get prediction
+double prediction = m_lstmModel->Predict(features);
+double signal = (prediction - 0.5) * 2.0; // Scale to [-1,1] range
+
+return signal;
+}
+features[4] = NormalizeData(currentATR, minATR, maxATR);
+
+double prediction = m_lstmModel->Predict(features);
+double signal = (prediction - 0.5) * 2.0; // Scale to [-1,1] range
+
+return signal;
 }
 
 //+------------------------------------------------------------------+
