@@ -7,10 +7,10 @@
 #property link      "https://github.com/JonusNattapong"
 #property version   "1.00"
 
-// Include necessary files for LSTM implementation
+// Include necessary files
 #include <Arrays\ArrayObj.mqh>
 #include <Math\Stat\Math.mqh>
-#include <MachineLearning\LSTM.mqh>
+#include <Indicators\Indicator.mqh>
 
 // AI Module for Signal Generation
 class CAK47AIModule
@@ -27,19 +27,25 @@ private:
     double          m_bollData[];       // Bollinger Bands data
     double          m_momData[];        // Momentum data
     double          m_atrData[];        // ATR data
+    double          m_priceChanges[];   // Price changes for training
     
     // Neural network variables (simplified)
-// LSTM model parameters
+// Model parameters
 #define INPUT_SIZE 5      // Number of input features
-#define HIDDEN_SIZE 32    // Number of LSTM hidden units
+#define HIDDEN_SIZE 32    // Number of hidden neurons
 #define OUTPUT_SIZE 1     // Single output for signal prediction
 
-CLSTM*          m_lstmModel;          // LSTM model instance
+// Neural network weights (simplified implementation)
+double          m_inputWeights[INPUT_SIZE][HIDDEN_SIZE];
+double          m_hiddenWeights[HIDDEN_SIZE][OUTPUT_SIZE];
+double          m_bias[HIDDEN_SIZE + OUTPUT_SIZE];
     
 // Private methods
     void            CalculateIndicators();
     void            PrepareTrainingData();
-    void            TrainLSTMModel();
+    void            TrainModel();
+    double          NormalizeData(double value, double min, double max);
+    double          ActivationFunction(double x);
     
 public:
                     CAK47AIModule(int period, double threshold, int historyBars);
@@ -67,14 +73,29 @@ CAK47AIModule::CAK47AIModule(int period, double threshold, int historyBars)
     ArrayResize(m_momData, m_historyBars);
     ArrayResize(m_atrData, m_historyBars);
     
-// Create and initialize LSTM model
-m_lstmModel = new CLSTM(INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE);
+// Initialize neural network weights with random values
+for(int i = 0; i < INPUT_SIZE; i++) {
+    for(int j = 0; j < HIDDEN_SIZE; j++) {
+        m_inputWeights[i][j] = 0.1 * MathRand() / 32767.0 - 0.05;
+    }
+}
+
+for(int i = 0; i < HIDDEN_SIZE; i++) {
+    for(int j = 0; j < OUTPUT_SIZE; j++) {
+        m_hiddenWeights[i][j] = 0.1 * MathRand() / 32767.0 - 0.05;
+    }
+    m_bias[i] = 0.1 * MathRand() / 32767.0 - 0.05;
+}
+
+for(int i = 0; i < OUTPUT_SIZE; i++) {
+    m_bias[HIDDEN_SIZE + i] = 0.1 * MathRand() / 32767.0 - 0.05;
+}
     
 // Initial calculation of indicators
 CalculateIndicators();
     
 // Initial training
-TrainLSTMModel();
+TrainModel();
     
 Print("AI Module initialized with period: ", period, " threshold: ", threshold);
 }
@@ -181,12 +202,35 @@ double CAK47AIModule::ActivationFunction(double x)
 }
 
 //+------------------------------------------------------------------+
+//|                  Prepare training data                          |
+//+------------------------------------------------------------------+
+void CAK47AIModule::PrepareTrainingData()
+{
+    // This is a very simplified training method
+    // In a real-world scenario, you would use proper machine learning algorithms
+    
+    // Calculate price changes for training targets
+    ArrayResize(m_priceChanges, m_historyBars - 1);
+    
+    for(int i = 0; i < m_historyBars - 1; i++)
+    {
+        m_priceChanges[i] = (m_priceData[i] > m_priceData[i+1]) ? 1.0 : -1.0;
+    }
+    
+    Print("Training data prepared with ", m_historyBars, " historical bars");
+}
+
+//+------------------------------------------------------------------+
 //|                  Train the AI model                             |
 //+------------------------------------------------------------------+
 void CAK47AIModule::TrainModel()
 {
-    // This is a very simplified training method
-    // In a real-world scenario, you would use proper machine learning algorithms
+    PrepareTrainingData();
+    
+    if(m_historyBars < 10) {
+        Print("Warning: Not enough history bars for training. Need at least 10 bars.");
+        return;
+    }
     
     // Find min and max values for normalization
     double minRSI = m_rsiData[ArrayMinimum(m_rsiData, 0, m_historyBars)];
@@ -201,17 +245,8 @@ void CAK47AIModule::TrainModel()
     double minATR = m_atrData[ArrayMinimum(m_atrData, 0, m_historyBars)];
     double maxATR = m_atrData[ArrayMaximum(m_atrData, 0, m_historyBars)];
     
-    // Simplified learning rate
+    // Learning rate
     double learningRate = 0.01;
-    
-    // Calculate price changes for training targets
-    double priceChanges[];
-    ArrayResize(priceChanges, m_historyBars - 1);
-    
-    for(int i = 0; i < m_historyBars - 1; i++)
-    {
-        priceChanges[i] = (m_priceData[i] > m_priceData[i+1]) ? 1.0 : -1.0;
-    }
     
     // Very simple training approach (not realistic for production)
     for(int epoch = 0; epoch < 100; epoch++)
@@ -219,52 +254,73 @@ void CAK47AIModule::TrainModel()
         for(int i = 5; i < m_historyBars - 1; i++)
         {
             // Input features
-            double features[5];
+            double features[INPUT_SIZE];
             features[0] = NormalizeData(m_rsiData[i], minRSI, maxRSI);
             features[1] = NormalizeData(m_macdData[i], minMACD, maxMACD);
             features[2] = NormalizeData(m_bollData[i], m_bollData[ArrayMinimum(m_bollData, 0, m_historyBars)], m_bollData[ArrayMaximum(m_bollData, 0, m_historyBars)]);
             features[3] = NormalizeData(m_momData[i], minMom, maxMom);
             features[4] = NormalizeData(m_atrData[i], minATR, maxATR);
             
-            // Forward pass (very simplified)
-            double neuronOutputs[10];
-            for(int j = 0; j < 10; j++)
+            // Forward pass - Hidden layer
+            double hiddenOutputs[HIDDEN_SIZE];
+            for(int j = 0; j < HIDDEN_SIZE; j++)
             {
-                neuronOutputs[j] = 0;
-                for(int k = 0; k < 5; k++)
+                hiddenOutputs[j] = 0.0;
+                for(int k = 0; k < INPUT_SIZE; k++)
                 {
-                    neuronOutputs[j] += features[k] * m_weights[j][k];
+                    hiddenOutputs[j] += features[k] * m_inputWeights[k][j];
                 }
-                neuronOutputs[j] = ActivationFunction(neuronOutputs[j] + m_bias[j]);
+                hiddenOutputs[j] = ActivationFunction(hiddenOutputs[j] + m_bias[j]);
             }
             
-            // Output layer (simplified to a single neuron)
-            double output = 0;
-            for(int j = 0; j < 10; j++)
+            // Output layer
+            double output = 0.0;
+            for(int j = 0; j < HIDDEN_SIZE; j++)
             {
-                output += neuronOutputs[j];
+                output += hiddenOutputs[j] * m_hiddenWeights[j][0];
             }
-            output = output / 10.0; // Simple average
+            output = ActivationFunction(output + m_bias[HIDDEN_SIZE]);
             
             // Target is based on future price movement
-            double target = (priceChanges[i] > 0) ? 1.0 : 0.0;
+            double target = (m_priceChanges[i] > 0) ? 1.0 : 0.0;
             
             // Error
             double error = target - output;
             
-            // Backpropagation (very simplified)
-            for(int j = 0; j < 10; j++)
+            // Backpropagation - Output layer
+            double outputDelta = error * output * (1.0 - output); // Derivative of sigmoid
+            
+            // Update hidden to output weights
+            for(int j = 0; j < HIDDEN_SIZE; j++)
             {
-                for(int k = 0; k < 5; k++)
+                m_hiddenWeights[j][0] += learningRate * outputDelta * hiddenOutputs[j];
+            }
+            
+            // Update output bias
+            m_bias[HIDDEN_SIZE] += learningRate * outputDelta;
+            
+            // Backpropagation - Hidden layer
+            for(int j = 0; j < HIDDEN_SIZE; j++)
+            {
+                double hiddenDelta = hiddenOutputs[j] * (1.0 - hiddenOutputs[j]) * outputDelta * m_hiddenWeights[j][0];
+                
+                // Update input to hidden weights
+                for(int k = 0; k < INPUT_SIZE; k++)
                 {
-                    m_weights[j][k] += learningRate * error * features[k];
+                    m_inputWeights[k][j] += learningRate * hiddenDelta * features[k];
                 }
-                m_bias[j] += learningRate * error;
+                
+                // Update hidden bias
+                m_bias[j] += learningRate * hiddenDelta;
             }
         }
+        
+        // Print progress every 20 epochs
+        if(epoch % 20 == 0)
+            Print("Training epoch ", epoch, " completed");
     }
     
-    Print("AI Model training completed");
+    Print("AI Model training completed successfully");
 }
 
 //+------------------------------------------------------------------+
@@ -275,9 +331,8 @@ void CAK47AIModule::UpdateModel()
     // Recalculate indicators with latest data
     CalculateIndicators();
     
-    // Retrain LSTM model with updated data
-// Retrain LSTM model with updated data
-TrainLSTMModel();
+    // Retrain model with updated data
+    TrainModel();
 }
 
 //+------------------------------------------------------------------+
@@ -316,16 +371,28 @@ double CAK47AIModule::GetSignal()
     features[3] = NormalizeData(currentMom, minMom, maxMom);
     features[4] = NormalizeData(currentATR, minATR, maxATR);
 
-// Use LSTM model to get prediction
-double prediction = m_lstmModel->Predict(features);
-double signal = (prediction - 0.5) * 2.0; // Scale to [-1,1] range
+// Use simple neural network to get prediction
+// Forward pass through the network
 
-return signal;
+// Hidden layer
+double hiddenOutputs[HIDDEN_SIZE];
+for(int i = 0; i < HIDDEN_SIZE; i++) {
+    hiddenOutputs[i] = 0.0;
+    for(int j = 0; j < INPUT_SIZE; j++) {
+        hiddenOutputs[i] += features[j] * m_inputWeights[j][i];
+    }
+    hiddenOutputs[i] = ActivationFunction(hiddenOutputs[i] + m_bias[i]);
 }
-features[4] = NormalizeData(currentATR, minATR, maxATR);
 
-double prediction = m_lstmModel->Predict(features);
-double signal = (prediction - 0.5) * 2.0; // Scale to [-1,1] range
+// Output layer
+double output = 0.0;
+for(int i = 0; i < HIDDEN_SIZE; i++) {
+    output += hiddenOutputs[i] * m_hiddenWeights[i][0];
+}
+output = ActivationFunction(output + m_bias[HIDDEN_SIZE]);
+
+// Scale to range [-1, 1]
+double signal = (output - 0.5) * 2.0;
 
 return signal;
 }
