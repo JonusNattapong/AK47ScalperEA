@@ -7,10 +7,6 @@
 #property link      "https://github.com/JonusNattapong"
 #property version   "1.00"
 
-// Include necessary files
-#include <Arrays\ArrayObj.mqh>
-#include <Arrays\ArrayDouble.mqh>
-
 // Structure for storing order blocks
 struct SOrderBlock
 {
@@ -331,7 +327,12 @@ void CAK47SMCModule::IdentifySupplyDemandZones()
             double open = iOpen(_Symbol, PERIOD_M1, i);
             
             // For supply zones, we look for price rejection from above
-            if(close < open && high > high, i-1) && high > high, i+1))
+            // Compare current high with neighboring highs to confirm rejection
+            if(
+                (close < open) &&
+                (high > iHigh(_Symbol, PERIOD_M1, i-1)) &&
+                (high > iHigh(_Symbol, PERIOD_M1, i+1))
+            )
             {
                 ArrayResize(potentialSupplyZones, supplyCount + 1);
                 potentialSupplyZones[supplyCount] = high;
@@ -339,7 +340,11 @@ void CAK47SMCModule::IdentifySupplyDemandZones()
             }
             
             // For demand zones, we look for price rejection from below
-            if(close > open && low < low, i-1) && low < low, i+1))
+            if(
+                (close > open) &&
+                (low < iLow(_Symbol, PERIOD_M1, i-1)) &&
+                (low < iLow(_Symbol, PERIOD_M1, i+1))
+            )
             {
                 ArrayResize(potentialDemandZones, demandCount + 1);
                 potentialDemandZones[demandCount] = low;
@@ -351,18 +356,22 @@ void CAK47SMCModule::IdentifySupplyDemandZones()
     // Find the most significant zones by clustering similar price levels
     if(supplyCount > 0)
     {
-        // Sort supply zones (descending order)
-        ArraySort(potentialSupplyZones, WHOLE_ARRAY, 0, MODE_DESCEND);
+        // Sort supply zones (ascending) then iterate from the end for descending effect
+        ArraySort(potentialSupplyZones);
         
         // Cluster similar levels
-        double clusterThreshold = iATR(_Symbol, PERIOD_M1, 14) * 0.5; // Half ATR as threshold
+        int atrHandle = iATR(_Symbol, PERIOD_M1, 14);
+        double atrBuffer[];
+        ArraySetAsSeries(atrBuffer, true);
+        CopyBuffer(atrHandle, 0, 0, 1, atrBuffer);
+        double clusterThreshold = atrBuffer[0] * 0.5; // Half ATR as threshold
         
         ArrayResize(m_supplyZones, 0);
-        double lastZone = potentialSupplyZones[0];
+        double lastZone = potentialSupplyZones[supplyCount-1];
         ArrayResize(m_supplyZones, 1);
         m_supplyZones[0] = lastZone;
         
-        for(int i = 1; i < supplyCount; i++)
+        for(int i = supplyCount-2; i >= 0; i--)
         {
             if(MathAbs(potentialSupplyZones[i] - lastZone) > clusterThreshold)
             {
@@ -379,7 +388,11 @@ void CAK47SMCModule::IdentifySupplyDemandZones()
         ArraySort(potentialDemandZones);
         
         // Cluster similar levels
-        double clusterThreshold = iATR(_Symbol, PERIOD_M1, 14) * 0.5; // Half ATR as threshold
+        int atrHandle = iATR(_Symbol, PERIOD_M1, 14);
+        double atrBuffer[];
+        ArraySetAsSeries(atrBuffer, true);
+        CopyBuffer(atrHandle, 0, 0, 1, atrBuffer);
+        double clusterThreshold = atrBuffer[0] * 0.5; // Half ATR as threshold
         
         ArrayResize(m_demandZones, 0);
         double lastZone = potentialDemandZones[0];
@@ -428,9 +441,16 @@ bool CAK47SMCModule::IsKeyReversal(int barIndex)
     // Outside bar
     bool outsideBar = (high1 > high2) && (low1 < low2);
     
-    // Key rejection
-    bool keyRejection = (high1 > high0 && high1 > high, barIndex+1)) || 
-                        (low1 < low0 && low1 < low, barIndex+1));
+    // Key rejection: current bar exceeds previous extremes and rejects next bar
+    bool keyRejection =
+        (
+            (high1 > high0) &&
+            (high1 > iHigh(_Symbol, PERIOD_M1, barIndex+1))
+        ) ||
+        (
+            (low1 < low0) &&
+            (low1 < iLow(_Symbol, PERIOD_M1, barIndex+1))
+        );
     
     return pinBar || bullishEngulfing || bearishEngulfing || outsideBar || keyRejection;
 }
@@ -505,7 +525,11 @@ int CAK47SMCModule::GetSignal()
         double distToDemand = (nearestDemand != 0) ? currentPrice - nearestDemand : DBL_MAX;
         
         // Determine signal based on proximity
-        double atr = iATR(_Symbol, PERIOD_M1, 14);
+        int atrHandle = iATR(_Symbol, PERIOD_M1, 14);
+        double atrBuffer[];
+        ArraySetAsSeries(atrBuffer, true);
+        CopyBuffer(atrHandle, 0, 0, 1, atrBuffer);
+        double atr = atrBuffer[0];
         
         if(distToSupply < atr && distToSupply < distToDemand)
         {
@@ -749,8 +773,12 @@ void CAK47SMCModule::DrawSupplyDemandZones()
         datetime time1 = TimeCurrent() - 60 * 60; // 1 hour back
         datetime time2 = TimeCurrent() + 60 * 60; // 1 hour ahead
         
-        double zoneHigh = m_supplyZones[i] + iATR(_Symbol, PERIOD_M1, 14) * 0.2;
-        double zoneLow = m_supplyZones[i] - iATR(_Symbol, PERIOD_M1, 14) * 0.2;
+        int atrHandle = iATR(_Symbol, PERIOD_M1, 14);
+        double atrBuffer[];
+        ArraySetAsSeries(atrBuffer, true);
+        CopyBuffer(atrHandle, 0, 0, 1, atrBuffer);
+        double zoneHigh = m_supplyZones[i] + atrBuffer[0] * 0.2;
+        double zoneLow  = m_supplyZones[i] - atrBuffer[0] * 0.2;
         
         ObjectCreate(0, name, OBJ_RECTANGLE, 0, time1, zoneHigh, time2, zoneLow);
         ObjectSetInteger(0, name, OBJPROP_COLOR, clrRed);
@@ -768,8 +796,12 @@ void CAK47SMCModule::DrawSupplyDemandZones()
         datetime time1 = TimeCurrent() - 60 * 60; // 1 hour back
         datetime time2 = TimeCurrent() + 60 * 60; // 1 hour ahead
         
-        double zoneHigh = m_demandZones[i] + iATR(_Symbol, PERIOD_M1, 14) * 0.2;
-        double zoneLow = m_demandZones[i] - iATR(_Symbol, PERIOD_M1, 14) * 0.2;
+        int atrHandle = iATR(_Symbol, PERIOD_M1, 14);
+        double atrBuffer[];
+        ArraySetAsSeries(atrBuffer, true);
+        CopyBuffer(atrHandle, 0, 0, 1, atrBuffer);
+        double zoneHigh = m_demandZones[i] + atrBuffer[0] * 0.2;
+        double zoneLow  = m_demandZones[i] - atrBuffer[0] * 0.2;
         
         ObjectCreate(0, name, OBJ_RECTANGLE, 0, time1, zoneHigh, time2, zoneLow);
         ObjectSetInteger(0, name, OBJPROP_COLOR, clrGreen);
