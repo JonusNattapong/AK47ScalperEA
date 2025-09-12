@@ -1,5 +1,19 @@
 # AK47ScalperEA
 
+[![Version](https://img.shields.io/badge/version-1.01-blue.svg)](https://github.com/JonusNattapong/AK47ScalperEA)
+[![Status](https://img.shields.io/badge/status-✅%20Compiled-success.svg)](https://github.com/JonusNattapong/AK47ScalperEA)
+[![Platform](https://img.shields.io/badge/platform-MetaTrader%205-orange.svg)](https://www.metatrader5.com/)
+[![Symbol](https://img.shields.io/badge/symbol-XAUUSD%20Gold-gold.svg)](https://github.com/JonusNattapong/AK47ScalperEA)
+
+## 🚀 Latest Updates (v1.01 - 2025-09-12)
+
+### ✅ Critical Fixes Applied
+- **Compilation Issues Resolved**: Fixed all iATR function parameter errors
+- **MQL5 Compatibility**: Updated to proper MQL5 syntax with buffer handling
+- **Dependencies Cleaned**: Removed unnecessary include files
+- **Status**: ✅ **Successfully Compiled** (0 errors, 0 warnings)
+- **Ready to Trade**: EA deployed and operational for XAUUSD
+
 ## รายละเอียดโปรเจค (Project Details)
 
 AK47ScalperEA เป็น Expert Advisor (EA) สำหรับการเทรด Scalping บนคู่เงิน XAU/USD ใน Timeframe M1 โดยใช้เทคนิค AI Signals ร่วมกับ SMC (Smart Money Concept) และระบบ Risk Control ที่มีประสิทธิภาพ

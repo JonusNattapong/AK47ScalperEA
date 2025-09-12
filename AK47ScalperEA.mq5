@@ -5,11 +5,12 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2025, JonusNattapong"
 #property link      "https://github.com/JonusNattapong"
-#property version   "1.00"
+#property version   "1.01"
 #property strict
-#property description "XAU/USD M1 Scalping EA with AI Signals and SMC"
+#property description "XAU/USD M1 Scalping EA with AI Signals and SMC - v1.01 (2025.09.12)"
 
 // Include necessary files
+#include "VERSION_INFO.mqh"
 #include "AK47_AI_Module.mqh"
 #include "AK47_SMC_Module.mqh"
 #include "AK47_Risk_Module.mqh"
@@ -76,8 +77,13 @@ int OnInit()
                                UseBreakEven, BreakEvenPoints);
     Report = new CAK47ReportModule(EAName, UseVisualDashboard);
     
-    // Print welcome message
-    Print("AK47ScalperEA initialized. Version 1.00");
+    // Print welcome message with version info
+    Print("=================================================");
+    Print("🚀 ", GetEAFullInfo());
+    Print("📊 Target: XAUUSD M1 Scalping Strategy");
+    Print("🔧 Status: Successfully Compiled & Initialized");
+    Print("⚡ Build: ", GetEABuildInfo());
+    Print("=================================================");
     
     // Setup event timer for regular updates
     EventSetTimer(1);
