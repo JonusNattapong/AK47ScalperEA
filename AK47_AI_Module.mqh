@@ -29,21 +29,35 @@ private:
     double          m_atrData[];        // ATR data
     double          m_priceChanges[];   // Price changes for training
     
-    // Neural network variables (simplified)
-// Model parameters
+    // Neural network variables
+    // Built-in fallback small MLP for on-terminal training
 #define INPUT_SIZE 5      // Number of input features
-#define HIDDEN_SIZE 32    // Number of hidden neurons
+#define HIDDEN_SIZE 32    // Number of hidden neurons (fallback)
 #define OUTPUT_SIZE 1     // Single output for signal prediction
+    
+    // Built-in fallback weights (used if no external model is loaded)
+    double          m_inputWeights[INPUT_SIZE][HIDDEN_SIZE];
+    double          m_hiddenWeights[HIDDEN_SIZE][OUTPUT_SIZE];
+    double          m_bias[HIDDEN_SIZE + OUTPUT_SIZE];
 
-// Neural network weights (simplified implementation)
-double          m_inputWeights[INPUT_SIZE][HIDDEN_SIZE];
-double          m_hiddenWeights[HIDDEN_SIZE][OUTPUT_SIZE];
-double          m_bias[HIDDEN_SIZE + OUTPUT_SIZE];
+    // External model (real AI) loaded from file
+    bool            m_modelLoaded;        // true if external model weights are loaded
+    int             m_extInput;           // input size from model file
+    int             m_extHidden;          // hidden size from model file
+    int             m_extOutput;          // output size from model file
+    double          m_W1[];               // flattened [m_extInput * m_extHidden]
+    double          m_b1[];               // [m_extHidden]
+    double          m_W2[];               // flattened [m_extHidden * m_extOutput]
+    double          m_b2[];               // [m_extOutput]
     
 // Private methods
     void            CalculateIndicators();
     void            PrepareTrainingData();
     void            TrainModel();
+    
+    // External model support
+    bool            LoadModelFromCSV(string filename);
+    double          PredictWithExternal(double &features[]);
     double          NormalizeData(double value, double min, double max);
     double          ActivationFunction(double x);
     
@@ -64,6 +78,7 @@ CAK47AIModule::CAK47AIModule(int period, double threshold, int historyBars)
     m_period = period;
     m_threshold = threshold;
     m_historyBars = historyBars;
+    m_modelLoaded = false;
     
     // Initialize arrays
     ArrayResize(m_priceData, m_historyBars);
@@ -94,8 +109,12 @@ for(int i = 0; i < OUTPUT_SIZE; i++) {
 // Initial calculation of indicators
 CalculateIndicators();
     
-// Initial training
-TrainModel();
+// Try load external model from MQL5/Files (place ak47_model.csv there)
+if(!LoadModelFromCSV("ak47_model.csv"))
+{
+    // Fallback to lightweight on-terminal training
+    TrainModel();
+}
     
 Print("AI Module initialized with period: ", period, " threshold: ", threshold);
 }
@@ -371,6 +390,12 @@ double CAK47AIModule::GetSignal()
     features[3] = NormalizeData(currentMom, minMom, maxMom);
     features[4] = NormalizeData(currentATR, minATR, maxATR);
 
+    // Prefer external model if available
+    if(m_modelLoaded && m_extInput == 5 && m_extOutput >= 1)
+    {
+        return PredictWithExternal(features);
+    }
+
 // Use simple neural network to get prediction
 // Forward pass through the network
 
@@ -421,4 +446,73 @@ string CAK47AIModule::GetModelStats()
     stats += "Current MACD: " + DoubleToString(m_macdData[0], 5) + "\n";
     
     return stats;
+}
+
+//+------------------------------------------------------------------+
+//|                  Load external model (CSV)                       |
+//+------------------------------------------------------------------+
+bool CAK47AIModule::LoadModelFromCSV(string filename)
+{
+    m_modelLoaded = false;
+    int fh = FileOpen(filename, FILE_READ | FILE_CSV | FILE_ANSI);
+    if(fh == INVALID_HANDLE)
+    {
+        // Not an error: simply means external model not supplied yet
+        Print("AI: External model not found (", filename, "). Using fallback model.");
+        return false;
+    }
+    // Expected layout (CSV, numbers only):
+    // in, hidden, out, [W1(in*hidden)], [b1(hidden)], [W2(hidden*out)], [b2(out)]
+    int in  = (int)FileReadNumber(fh);
+    int hid = (int)FileReadNumber(fh);
+    int out = (int)FileReadNumber(fh);
+    if(in <= 0 || hid <= 0 || out <= 0)
+    {
+        FileClose(fh);
+        Print("AI: Invalid model header in ", filename);
+        return false;
+    }
+    ArrayResize(m_W1, in * hid);
+    ArrayResize(m_b1, hid);
+    ArrayResize(m_W2, hid * out);
+    ArrayResize(m_b2, out);
+    for(int i = 0; i < in * hid; i++) m_W1[i] = FileReadNumber(fh);
+    for(int i = 0; i < hid; i++)      m_b1[i] = FileReadNumber(fh);
+    for(int i = 0; i < hid * out; i++) m_W2[i] = FileReadNumber(fh);
+    for(int i = 0; i < out; i++)       m_b2[i] = FileReadNumber(fh);
+    FileClose(fh);
+    m_extInput = in;
+    m_extHidden = hid;
+    m_extOutput = out;
+    m_modelLoaded = true;
+    Print("AI: Loaded external model (", in, "x", hid, "x", out, ") from ", filename);
+    return true;
+}
+
+//+------------------------------------------------------------------+
+//|                  Predict with external model                     |
+//+------------------------------------------------------------------+
+double CAK47AIModule::PredictWithExternal(double &features[])
+{
+    if(!m_modelLoaded) return 0.0;
+    if(ArraySize(features) < m_extInput) return 0.0;
+    // Hidden layer
+    double hidden[];
+    ArrayResize(hidden, m_extHidden);
+    for(int i = 0; i < m_extHidden; i++)
+    {
+        double s = 0.0;
+        for(int j = 0; j < m_extInput; j++)
+        {
+            s += features[j] * m_W1[j * m_extHidden + i];
+        }
+        hidden[i] = ActivationFunction(s + m_b1[i]);
+    }
+    // Output layer (assume single output)
+    double out = 0.0;
+    for(int i = 0; i < m_extHidden; i++)
+        out += hidden[i] * m_W2[i * m_extOutput + 0];
+    out = ActivationFunction(out + m_b2[0]);
+    // Scale to [-1, 1]
+    return (out - 0.5) * 2.0;
 }
