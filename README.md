@@ -4,7 +4,7 @@
 ---
 
 ### Technical Specification
-This is not a trading bot. This is a quantitative execution system.
+This is not a trading bot. This is a fully autonomous quantitative execution system. It does not require any human input ever.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -51,9 +51,13 @@ This is not a trading bot. This is a quantitative execution system.
 2.  Attach to **XAUUSD M1** chart only
 3.  Enable Auto Trading
 
-**There are no inputs. There are no settings. There is nothing to configure.**
+**✅ มีแค่การตั้งค่าเดียวที่คุณต้องทำ:**
+1.  ตั้งค่า `LotSize` เท่านั้น ที่คุณยอมรับได้
+2.  เปิด Auto Trading
+3.  ปิดแท็บแล้วไม่ต้องกลับมาดูอีกเลย
 
-Do not change anything. Do not run on other pairs. Do not run on other timeframes.
+🔴 อย่าเปลี่ยนแปลงค่าอื่นๆ ทั้งหมด อย่าเปิดบนคู่เงินอื่น อย่าเปิดบน Timeframe อื่นๆ
+AI จะจัดการทุกอย่างที่เหลือเองทั้งหมด
 
 ---
 
