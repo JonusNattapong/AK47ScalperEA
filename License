@@ -1,17 +1,33 @@
-© 2023-2025, JonusNattapong (AK47ScalperEA)
-สงวนลิขสิทธิ์ทั้งหมด (All Rights Reserved)
+MIT License
 
-โปรแกรม Expert Advisor นี้ ("AK47ScalperEA") เป็นทรัพย์สินทางปัญญาที่ได้รับการคุ้มครองตามกฎหมายลิขสิทธิ์ของประเทศไทยและกฎหมายระหว่างประเทศ
+Copyright (c) 2026 AK47 Scalper EA Developer
 
-**ข้อกำหนดการใช้งาน:**
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-1. อนุญาตให้ใช้งานเพื่อวัตถุประสงค์ส่วนตัวหรือการศึกษาเท่านั้น
-2. การทำซ้ำ แจกจ่าย ดัดแปลง แก้ไข หรือสร้างงานต่อเนื่องจากซอฟต์แวร์นี้โดยไม่ได้รับอนุญาตเป็นลายลักษณ์อักษรจากเจ้าของลิขสิทธิ์เป็นสิ่งต้องห้าม
-3. การใช้งานเพื่อวัตถุประสงค์ทางการค้า การจำหน่าย หรือการให้บริการที่เกี่ยวข้องกับซอฟต์แวร์นี้ ต้องได้รับอนุญาตเป็นลายลักษณ์อักษรจากเจ้าของลิขสิทธิ์ก่อนเท่านั้น
-4. การละเมิดข้อกำหนดใดๆ อาจนำไปสู่การดำเนินคดีตามกฎหมาย
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-**การปฏิเสธความรับผิดชอบ:**
-ซอฟต์แวร์นี้จัดทำขึ้นโดยไม่มีการรับประกันใดๆ ทั้งสิ้น ไม่ว่าจะโดยชัดแจ้งหรือโดยนัย เจ้าของลิขสิทธิ์จะไม่รับผิดชอบต่อความเสียหายใดๆ ที่อาจเกิดขึ้นจากการใช้งานซอฟต์แวร์นี้
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
-**การติดต่อเพื่อขออนุญาต:**
-หากต้องการใช้งานเพื่อวัตถุประสงค์อื่นนอกเหนือจากที่ระบุไว้ โปรดติดต่อเจ้าของลิขสิทธิ์ที่อีเมล: <zombitx64@gmail.com> หรือที่ GitHub: <https://github.com/JonusNattapong>
+---
+
+IMPORTANT TRADING RISK DISCLAIMER:
+
+Trading Foreign Exchange (Forex) and Contracts for Difference (CFDs) on margin carries a high level of risk and may not be suitable for all investors. The high degree of leverage can work against you as well as for you.
+
+AK47 Scalper EA is an automated trading tool provided "AS IS" for educational and research purposes only. The developer(s) and contributors shall not be held responsible for any financial losses, damages, or unintended outcomes resulting from the use of this software. 
+
+Past performance of any trading system is not indicative of future results. No representation is being made that any account will or is likely to achieve profits or losses similar to those discussed or shown in the documentation. 
+
+USE THIS SOFTWARE AT YOUR OWN RISK. ALWAYS TEST ON A DEMO ACCOUNT BEFORE TRADING WITH REAL CAPITAL.

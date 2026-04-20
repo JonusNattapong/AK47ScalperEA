@@ -1,0 +1,21 @@
+# MetaTrader build outputs
+*.ex5
+*.exp
+
+# Compiler and runtime logs
+*.log
+compile_log.txt
+logs/
+
+# Local MetaEditor and IDE artifacts
+*.tmp
+*.bak
+*.orig
+
+# OS artifacts
+Thumbs.db
+Desktop.ini
+
+# Editor settings
+.vscode/
+.idea/
