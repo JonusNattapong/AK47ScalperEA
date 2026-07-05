@@ -141,8 +141,8 @@ void OnTick()
       if(TimeCurrent() > sym.lastApiCall + ApiCallInterval)
       {
          double features[19];
-         GetMarketFeatures(features, "USDX", "SPX500", "US10Y", "BTCUSD");
-         GetQuantumFeatures(features, 16);
+         GetMarketFeatures(sym.symbol, features, "USDX", "SPX500", "US10Y", "BTCUSD");
+         GetQuantumFeatures(sym.symbol, features, 16);
 
          newsAi.AnalyzeMarketWithKilo(sym.symbol, features);
          sym.lastApiCall = TimeCurrent();
@@ -154,7 +154,8 @@ void OnTick()
       // Execute Agent Order
       if(sym.lastConfidence > 0.82 && TimeCurrent() > sym.lastTradeTime + 300)
       {
-         double atr = iATR(sym.symbol, PERIOD_M1, 14, 0);
+         double atr = GetAtrValue(sym.symbol);
+         if(atr <= 0.0) continue;
          double sl = atr * 1.5;
          double tp = atr * 2.5;
 
