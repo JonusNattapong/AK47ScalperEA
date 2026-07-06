@@ -1500,6 +1500,28 @@ void TrackClosedPositions()
 //+------------------------------------------------------------------+
 void ManagePositions()
 {
+   // --- Fetch and Apply Web modifications (SL/TP) ---
+   if(WebBridgeIsEnabled())
+   {
+      ulong modTickets[];
+      double modSLs[];
+      double modTPs[];
+      int modCount = WebBridgeFetchModifications(modTickets, modSLs, modTPs);
+      for(int m = 0; m < modCount; m++)
+      {
+         ulong ticket = modTickets[m];
+         if(PositionSelectByTicket(ticket))
+         {
+            double newSL = modSLs[m];
+            double newTP = modTPs[m];
+            if(trade.PositionModify(ticket, newSL, newTP))
+            {
+               Print("WebBridge: position #", ticket, " modified by web. New SL=", newSL, " New TP=", newTP);
+            }
+         }
+      }
+   }
+
    for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
       ulong ticket = PositionGetTicket(i);

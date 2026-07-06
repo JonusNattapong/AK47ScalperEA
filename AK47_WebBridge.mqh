@@ -237,6 +237,47 @@ bool WebBridgeFetchIsPaused()
    return (pausedStr == "1" || pausedStr == "true");
 }
 
+//+------------------------------------------------------------------+
+//| Fetch Position Modifications from Web Dashboard                 |
+//+------------------------------------------------------------------+
+int WebBridgeFetchModifications(ulong &tickets[], double &slList[], double &tpList[])
+{
+   if(!g_webEnabled) return 0;
+
+   string response = WebBridgeGet("/api/positions/updates");
+   if(response == "" || response == "[]") return 0;
+
+   int count = 0;
+   int pos = 0;
+   while(pos < StringLen(response))
+   {
+      int start = StringFind(response, "{", pos);
+      if(start < 0) break;
+      int end = StringFind(response, "}", start);
+      if(end < 0) break;
+
+      string item = StringSubstr(response, start, end - start + 1);
+      pos = end + 1;
+
+      ulong ticket = (ulong)StringToInteger(ExtractJson(item, "ticket"));
+      double sl = StringToDouble(ExtractJson(item, "sl"));
+      double tp = StringToDouble(ExtractJson(item, "tp"));
+
+      if(ticket > 0)
+      {
+         ArrayResize(tickets, count + 1);
+         ArrayResize(slList, count + 1);
+         ArrayResize(tpList, count + 1);
+
+         tickets[count] = ticket;
+         slList[count] = sl;
+         tpList[count] = tp;
+         count++;
+      }
+   }
+   return count;
+}
+
 
 //+------------------------------------------------------------------+
 //| Simple JSON field extractor (no dependencies)                    |
