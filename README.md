@@ -64,28 +64,63 @@ high-confidence signals under a strict risk framework.
 
 ## 📁 Files
 
-| File | Role |
+| File / Folder | Role |
 |---|---|
-| `AK47ScalperEA.mq5` | Main EA — orchestration, risk gate, execution, dashboard |
-| `AK47_Quantum.mqh` | Self-contained quantitative feature engine (no NN) |
+| `AK47ScalperEA.mq5` | Main EA — orchestration, risk gate, execution, and local chart dashboard |
+| `AK47_Quantum.mqh` | Self-contained quantitative feature engine (generates 19-dimension feature vector) |
 | `AK47_News.mqh` | Kilo API client + MT5 economic-calendar outlook |
+| `AK47_WebBridge.mqh` | Web Dashboard Bridge — POSTs EA states, open/closed positions, signals, & logs to the local Node.js server |
+| `web/` | Local Node.js / Express / Socket.IO web console for live stats, charts, strategy config, and agent chat logs |
+
+---
+
+## 🖥️ Web Console Dashboard
+
+The repository includes a local web-based dashboard console for real-time monitoring, strategy editing, and chat integration.
+
+### Features
+* **Real-time Metrics**: Live balance, equity, and daily P&L.
+* **Positions Panel**: Interactive list of active and historical trades.
+* **Signals & Insights**: Feeds signal notifications and Kilo AI agent reasoning details.
+* **Database Logs**: SQLite-based historical performance tracking and signal/chat backup.
+
+### Quick Start
+1. **Navigate to the web directory**:
+   ```bash
+   cd web
+   ```
+2. **Install dependencies**:
+   ```bash
+   npm install
+   ```
+3. **Start the local server**:
+   ```bash
+   npm run dev
+   ```
+4. **Access the console** at `http://localhost:3000`.
+
+### Integration with EA
+* To route data from MT5 to the dashboard, ensure you include `AK47_WebBridge.mqh` in the EA code and invoke `WebBridgeEnable("127.0.0.1", 3000)` during initialization.
+* Whitelist `http://127.0.0.1:3000` in MT5 under:
+  `Tools → Options → Expert Advisors → Allow WebRequest for listed URL`.
 
 ---
 
 ## ⚙️ Installation
 
-1. Copy `AK47ScalperEA.mq5`, `AK47_Quantum.mqh`, and `AK47_News.mqh` into
+1. Copy `AK47ScalperEA.mq5`, `AK47_Quantum.mqh`, `AK47_News.mqh`, and `AK47_WebBridge.mqh` into
    `<MT5 Data Folder>/MQL5/Experts/AK47ScalperEA/`.
 2. Open in **MetaEditor** and compile `AK47ScalperEA.mq5` (F7).
-3. **Whitelist the Kilo API URL** so the EA can reach the agent:
+3. **Whitelist API URLs** so the EA can reach the agent and local dashboard:
    `Tools → Options → Expert Advisors → Allow WebRequest for listed URL` →
-   add `https://api.kilocode.ai`.
+   add `https://api.kilocode.ai` and `http://127.0.0.1:3000` (if using the Web Console).
 4. Attach the EA to any chart and enable **Auto Trading**.
 
 > การเทรดหลายคู่จัดการจากภายในตัว EA ผ่านพารามิเตอร์ `TradingSymbols`
 > — แนบ EA บนกราฟเดียวก็พอ ไม่ต้องเปิดหลายกราฟ
 
 ---
+
 
 ## 🔧 Inputs
 
