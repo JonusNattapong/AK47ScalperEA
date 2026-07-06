@@ -1,77 +1,151 @@
-# AK47 Scalper EA V5.1 | BLACK EDITION
-## FINAL RELEASE | 20 APR 2026
+# AK47 Scalper EA — V5.0 PURE AGENT EDITION
+
+**🔥 100% Kilo API Driven · Zero Internal Neural Networks · Multi-Symbol**
+
+AK47 Scalper EA is a fully autonomous, multi-symbol scalping Expert Advisor for
+MetaTrader 5. Every trade decision is delegated to the **Kilo AI Agent** — the
+EA itself carries no built-in prediction model. It extracts a rich quantitative
+feature vector from the live market, hands it to the agent, and executes only on
+high-confidence signals under a strict risk framework.
+
+> คือ EA ที่ตัดสินใจด้วย AI Agent 100% ไม่มีโมเดลภายในเลย — ตัว EA ทำหน้าที่
+> เก็บข้อมูลตลาด ส่งให้ Kilo Agent วิเคราะห์ แล้วเข้าออเดอร์เฉพาะสัญญาณที่มั่นใจสูง
+> ภายใต้ระบบบริหารความเสี่ยงที่เข้มงวด
 
 ---
 
-### Technical Specification
-This is not a trading bot. This is a fully autonomous quantitative execution system. It does not require any human input ever.
+## ✨ What's New in V5.0
+
+| Change | Detail |
+|---|---|
+| 🧠 **All neural networks removed** | The internal MLP / LSTM / Tri-Brain stack is gone. Signals come **only** from the Kilo API. |
+| ⚛️ **Quantum Feature Engine** | New `AK47_Quantum.mqh` builds a 19-dimension feature vector per symbol (price action, structure, swarm correlations, entropy, Hurst memory, volatility regime). |
+| 🔀 **True multi-symbol** | Trades a configurable basket (default `XAUUSD, EURUSD, GBPUSD, USDJPY`) with per-symbol indicator handles and magic numbers. |
+| 📰 **Native MT5 calendar** | `AK47_News.mqh` feeds upcoming economic events straight into the agent prompt. |
+
+---
+
+## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  TRI-BRAIN CONSENSUS ARCHITECTURE                           │
-│  ┌─────────┐     ┌─────────┐     ┌─────────┐               │
-│  │  M1     │────▶│  M5     │────▶│  H1     │               │
-│  │  MICRO  │◀────│  MID    │◀────│  MACRO  │               │
-│  └─────────┘     └─────────┘     └─────────┘               │
-│                     ▼                                       │
-│  LIQUIDITY SWEEP CONFIRMATION  ────▶  UNANIMOUS VOTE ONLY   │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                    AK47 PURE AGENT PIPELINE                    │
+│                                                                │
+│   [ MARKET FEED ]  ── per symbol ──►  [ QUANTUM ENGINE ]       │
+│                                        AK47_Quantum.mqh        │
+│                                        features[0..18]         │
+│                                             │                  │
+│   [ MT5 ECONOMIC CALENDAR ] ──►  [ NEWS/AGENT CLIENT ]         │
+│                                    AK47_News.mqh               │
+│                                             │                  │
+│                                             ▼                  │
+│                                   [ KILO AI AGENT ]            │
+│                              action · confidence · insight     │
+│                                             │                  │
+│                        confidence > 0.82 ?  │                  │
+│                                             ▼                  │
+│               [ RISK GATE ]  ─►  [ EXECUTE ]  ─►  [ TRAIL ]    │
+│         drawdown · profit · spread · session · max orders     │
+└──────────────────────────────────────────────────────────────┘
 ```
 
+### Feature vector (19 dimensions)
+| Index | Source | Meaning |
+|---|---|---|
+| `0–2` | Price action | Body, range, close-to-close momentum |
+| `3–7` | Indicators | RSI, CCI, MACD, Stochastic, ATR |
+| `8–11` | Structure | MA distance, volume ratio, MA slope, Hurst(50) |
+| `12–15` | Swarm | DXY, SPX500, US10Y, BTCUSD correlation drift |
+| `16` | Quantum | Return **entropy** (market randomness) |
+| `17` | Quantum | **Hurst** market memory (trend persistence) |
+| `18` | Quantum | **Volatility regime** (short vs long ATR) |
+
 ---
 
-## ✅ Core Execution Logic
-| Layer | Rule |
+## 📁 Files
+
+| File | Role |
 |---|---|
-| 1 | **No trade is executed until both buy and sell liquidity have been swept in the last 15 candles** |
-| 2 | All 3 neural networks must agree 100% on direction. No exceptions. No weighting. |
-| 3 | Once first position is opened in a session, opposite direction is permanently locked. |
-| 4 | Lot size is adjusted exponentially based on current account drawdown. |
-| 5 | All training data automatically decays and is forgotten after 168 hours (7 days). |
-| 6 | Open positions are actively managed by independent execution agent thread. |
-
----
-
-## 📊 Performance Baseline
-| Metric | Value |
-|---|---|
-| Expected Win Rate | `74 - 78%` |
-| Maximum Drawdown | `< 6%` |
-| Profit Factor | `1.87 - 1.93` |
-| Average Trades / Day | `2 - 5` |
-| Sharpe Ratio | `2.1` |
-| Calmar Ratio | `3.2` |
-
-*Backtested 12 months XAUUSD M1. Out of sample. No overfitting.*
+| `AK47ScalperEA.mq5` | Main EA — orchestration, risk gate, execution, dashboard |
+| `AK47_Quantum.mqh` | Self-contained quantitative feature engine (no NN) |
+| `AK47_News.mqh` | Kilo API client + MT5 economic-calendar outlook |
 
 ---
 
 ## ⚙️ Installation
-1.  Copy `AK47ScalperEA.ex5` to `/MQL5/Experts/`
-2.  Attach to **XAUUSD M1** chart only
-3.  Enable Auto Trading
 
-**✅ มีแค่การตั้งค่าเดียวที่คุณต้องทำ:**
-1.  ตั้งค่า `LotSize` เท่านั้น ที่คุณยอมรับได้
-2.  เปิด Auto Trading
-3.  ปิดแท็บแล้วไม่ต้องกลับมาดูอีกเลย
+1. Copy `AK47ScalperEA.mq5`, `AK47_Quantum.mqh`, and `AK47_News.mqh` into
+   `<MT5 Data Folder>/MQL5/Experts/AK47ScalperEA/`.
+2. Open in **MetaEditor** and compile `AK47ScalperEA.mq5` (F7).
+3. **Whitelist the Kilo API URL** so the EA can reach the agent:
+   `Tools → Options → Expert Advisors → Allow WebRequest for listed URL` →
+   add `https://api.kilocode.ai`.
+4. Attach the EA to any chart and enable **Auto Trading**.
 
-🔴 อย่าเปลี่ยนแปลงค่าอื่นๆ ทั้งหมด อย่าเปิดบนคู่เงินอื่น อย่าเปิดบน Timeframe อื่นๆ
-AI จะจัดการทุกอย่างที่เหลือเองทั้งหมด
-
----
-
-## ⚠️ Operational Notes
-- This system does not chase entries. It waits for the market to come to it.
-- There will be days with zero trades. This is intended behaviour.
-- Demo test minimum 14 calendar days before live execution.
-- No support will be provided. This system works exactly as documented.
-- This is the final version. There will be no updates. There will be no V6.
+> การเทรดหลายคู่จัดการจากภายในตัว EA ผ่านพารามิเตอร์ `TradingSymbols`
+> — แนบ EA บนกราฟเดียวก็พอ ไม่ต้องเปิดหลายกราฟ
 
 ---
 
-> "The best trade is the one you didn't take."
+## 🔧 Inputs
+
+### Core
+| Input | Default | Description |
+|---|---|---|
+| `LotSize` | `0.01` | Fixed lot per position |
+| `MaxDailyDrawdown` | `4.0` | % daily loss → pause all trading |
+| `DailyProfitTarget` | `2.5` | % daily profit → stop for the day |
+| `BaseMagicNumber` | `4747` | Base magic (each symbol gets `base + i`) |
+| `MaxOrdersTotal` | `4` | Max concurrent positions across the basket |
+| `MaxSpread` | `35` | Max allowed spread (points) per entry |
+
+### Kilo Agent
+| Input | Default | Description |
+|---|---|---|
+| `UseNewsAiFilter` | `true` | Always on in Pure Agent Edition |
+| `Kilo_ApiKey` | `YOUR_API_KEY_HERE` | **Set your Kilo API key** |
+| `Kilo_ApiUrl` | `https://api.kilocode.ai/v1/chat/completions` | Agent endpoint |
+| `ApiCallInterval` | `15` | Seconds between agent calls per symbol |
+
+### Multi-symbol & management
+| Input | Default | Description |
+|---|---|---|
+| `TradingSymbols` | `XAUUSD,EURUSD,GBPUSD,USDJPY` | Comma-separated basket (max 8) |
+| `TrailingStart` | `100` | Points in profit before trailing begins |
+| `TrailingStop` | `30` | Trailing distance (points) |
 
 ---
 
-`Copyright 2026 | Final Release`
+## 🛡️ Risk & Execution Logic
+
+- **Entry** only when agent confidence `> 0.82` and at least 5 minutes since the
+  last trade on that symbol.
+- **SL / TP** are ATR-dynamic: `SL = ATR × 1.5`, `TP = ATR × 2.5`.
+- **One position per symbol**, capped by `MaxOrdersTotal` across the basket.
+- **Global protection**: trading pauses for the day on hitting either the daily
+  drawdown limit or the daily profit target.
+- **Session filter**: no new entries during the OFF session (weekends / dead hours).
+- **Spread guard**: entries skipped when spread exceeds `MaxSpread`.
+- **Trailing stop** locks in profit once `TrailingStart` is reached.
+
+---
+
+## ⚠️ Requirements & Notes
+
+- MetaTrader 5 build with **Economic Calendar** and **WebRequest** enabled.
+- A valid **Kilo API key** — without it the agent returns no signal and the EA
+  simply waits (no trades).
+- Test on a **demo account** before going live.
+- Trade frequency is deliberately low: with no confident signal, the EA holds.
+  Zero-trade sessions are expected behaviour.
+
+---
+
+## 📜 License
+
+See the [`License`](./License) file. See [`CHANGELOG.md`](./CHANGELOG.md) for
+version history and [`docs/`](./docs) for configuration and roadmap details.
+
+---
+
+`Copyright 2026 — AK47 Scalper EA · Pure Agent Edition`
