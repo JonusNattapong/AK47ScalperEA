@@ -5,21 +5,32 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2026, AK47 Scalper EA"
 #property link      ""
-#property version   "5.00"
+#property version   "5.10"
 #property strict
-#property description "AK47 PURE AGENT EDITION - 100% API DRIVEN"
+#property description "AK47 PURE AGENT EDITION - 100% API DRIVEN | HIGH-RISK MODE"
 
 #include <Trade\Trade.mqh>
 #include "AK47_News.mqh"
 #include "AK47_Quantum.mqh"
 
 // EA Settings
-input double LotSize           = 0.01;
-input double MaxDailyDrawdown  = 4.0;    // % Max drawdown per day
-input double DailyProfitTarget = 2.5;    // % Daily profit target to stop
+input double LotSize           = 0.01;   // Fallback lot when risk sizing is OFF
+input double MaxDailyDrawdown  = 15.0;   // % Max drawdown per day (HIGH RISK)
+input double DailyProfitTarget = 10.0;   // % Daily profit target to stop
 input int    BaseMagicNumber   = 4747;
-input int    MaxOrdersTotal    = 4;
-input int    MaxSpread         = 35;     // Max allowed spread in points
+input int    MaxOrdersTotal    = 8;      // Max concurrent positions (HIGH RISK)
+input int    MaxSpread         = 45;     // Max allowed spread in points
+
+// --- 🔥 HIGH-RISK / AGGRESSIVE MODE ---
+input bool   AggressiveMode        = true;   // Master switch for high-risk sizing
+input double RiskPercentPerTrade   = 3.0;    // % of balance risked per trade
+input double AggressiveLotFactor   = 6.0;    // Confidence overshoot -> lot amplifier
+input double MaxLotCap             = 5.0;    // Hard ceiling on any single lot
+input double EntryConfidence       = 0.65;   // Min AI confidence to fire (lower = more trades)
+input int    MaxPositionsPerSymbol = 3;      // Pyramiding cap per symbol (HIGH RISK)
+input int    ReentryCooldownSec    = 60;     // Seconds between entries on same symbol
+input double AtrSlMultiplier       = 1.2;    // Tight SL (ATR x)
+input double AtrTpMultiplier       = 3.2;    // Wide TP (ATR x) -> aggressive R:R
 
 // --- KILO AGENT API ---
 input bool   UseNewsAiFilter   = true;   // 🔴 ALWAYS ON NOW
@@ -132,7 +143,8 @@ void OnTick()
    {
       SymbolInstance &sym = g_symbols[i];
       if(sym.isTradingDisabled) continue;
-      if(PositionsTotalMagicSymbol(sym.magicNumber) >= 1) continue;
+      // HIGH RISK: allow stacking up to MaxPositionsPerSymbol on the same symbol
+      if(PositionsTotalMagicSymbol(sym.magicNumber) >= MaxPositionsPerSymbol) continue;
 
       int spread = (int)SymbolInfoInteger(sym.symbol, SYMBOL_SPREAD);
       if(spread > MaxSpread) continue;
@@ -151,24 +163,26 @@ void OnTick()
          sym.lastInsight = newsAi.GetInsight();
       }
 
-      // Execute Agent Order
-      if(sym.lastConfidence > 0.82 && TimeCurrent() > sym.lastTradeTime + 300)
+      // Execute Agent Order (HIGH RISK: lower confidence gate + faster re-entry)
+      if(sym.lastConfidence > EntryConfidence && TimeCurrent() > sym.lastTradeTime + ReentryCooldownSec)
       {
          double atr = GetAtrValue(sym.symbol);
          if(atr <= 0.0) continue;
-         double sl = atr * 1.5;
-         double tp = atr * 2.5;
+         double sl = atr * AtrSlMultiplier;
+         double tp = atr * AtrTpMultiplier;
+         double lot = CalculateAggressiveLot(sym.symbol, sl, sym.lastConfidence);
+         if(lot <= 0.0) continue;
 
          if(sym.lastAction == "BUY")
          {
             double ask = SymbolInfoDouble(sym.symbol, SYMBOL_ASK);
-            trade.Buy(LotSize, sym.symbol, 0, NormalizeDouble(ask - sl, sym.digit), NormalizeDouble(ask + tp, sym.digit), sym.magicNumber, "KILO AGENT BUY");
+            trade.Buy(lot, sym.symbol, 0, NormalizeDouble(ask - sl, sym.digit), NormalizeDouble(ask + tp, sym.digit), sym.magicNumber, "KILO AGENT BUY");
             sym.lastTradeTime = TimeCurrent();
          }
          else if(sym.lastAction == "SELL")
          {
             double bid = SymbolInfoDouble(sym.symbol, SYMBOL_BID);
-            trade.Sell(LotSize, sym.symbol, 0, NormalizeDouble(bid + sl, sym.digit), NormalizeDouble(bid - tp, sym.digit), sym.magicNumber, "KILO AGENT SELL");
+            trade.Sell(lot, sym.symbol, 0, NormalizeDouble(bid + sl, sym.digit), NormalizeDouble(bid - tp, sym.digit), sym.magicNumber, "KILO AGENT SELL");
             sym.lastTradeTime = TimeCurrent();
          }
       }
@@ -190,9 +204,11 @@ void UpdateDashboard()
    text += "╔════════════════════════════════════════╗\n";
    text += "║     AK47 PURE AGENT EDITION           ║\n";
    text += "║    🔥 100% KILO API DRIVEN 🔥         ║\n";
+   text += StringFormat("║   %s                        ║\n", AggressiveMode ? "⚠️  HIGH-RISK MODE ⚠️ " : "🛡️  STANDARD MODE   ");
    text += "╠════════════════════════════════════════╣\n";
    text += StringFormat("║  Status: %s                           ║\n", isGlobalDisabled ? "🔴 GLOBAL PAUSED" : "🟢 ACTIVE");
    text += StringFormat("║  Daily P/L: %+7.2f %s  (%+5.2f %%)     ║\n", dailyProfit, AccountInfoString(ACCOUNT_CURRENCY), profitPercent);
+   text += StringFormat("║  Risk/Trade: %.1f%% | Conf>=%.0f%%          ║\n", RiskPercentPerTrade, EntryConfidence*100);
    text += "╠────────────────────────────────────────╣\n";
 
    for(int i=0; i<g_symbolCount; i++)
@@ -210,6 +226,52 @@ void UpdateDashboard()
    text += "✅ ALL DECISIONS FROM KILO API\n";
 
    Comment(text);
+}
+
+//+------------------------------------------------------------------+
+//| HIGH-RISK Position Sizing                                        |
+//|  - Risks RiskPercentPerTrade % of balance based on the SL size   |
+//|  - Amplifies the lot as AI confidence overshoots EntryConfidence |
+//|  - Clamped to broker volume limits and MaxLotCap                 |
+//+------------------------------------------------------------------+
+double CalculateAggressiveLot(string symbol, double slPriceDistance, double confidence)
+{
+   double minLot  = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+   double maxLot  = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
+   double lotStep = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+   if(minLot <= 0.0)  minLot  = 0.01;
+   if(lotStep <= 0.0) lotStep = 0.01;
+
+   // Conservative fallback when aggressive sizing is disabled or data is missing
+   if(!AggressiveMode) return LotSize;
+
+   double balance   = AccountInfoDouble(ACCOUNT_BALANCE);
+   double riskMoney = balance * RiskPercentPerTrade / 100.0;
+
+   double tickValue = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
+   double tickSize  = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
+   if(tickValue <= 0.0 || tickSize <= 0.0 || slPriceDistance <= 0.0) return LotSize;
+
+   // Money lost per 1.0 lot if the stop is hit
+   double lossPerLot = (slPriceDistance / tickSize) * tickValue;
+   if(lossPerLot <= 0.0) return LotSize;
+
+   double lots = riskMoney / lossPerLot;
+
+   // Confidence amplifier: the more the agent overshoots the entry gate, the bigger the size
+   double overshoot = confidence - EntryConfidence;
+   if(overshoot < 0.0) overshoot = 0.0;
+   lots *= (1.0 + overshoot * AggressiveLotFactor);
+
+   // Clamp to caps and broker limits, then snap to lot step
+   if(lots > MaxLotCap) lots = MaxLotCap;
+   if(maxLot > 0.0 && lots > maxLot) lots = maxLot;
+   if(lots < minLot) lots = minLot;
+
+   lots = MathFloor(lots / lotStep) * lotStep;
+   if(lots < minLot) lots = minLot;
+
+   return NormalizeDouble(lots, 2);
 }
 
 //+------------------------------------------------------------------+
