@@ -1,28 +1,18 @@
 //+------------------------------------------------------------------+
 //|                                                 AK47_Quantum.mqh |
 //|                        Copyright 2026, AK47 Scalper EA Developer |
-//|                                             https://github.com/  |
 //+------------------------------------------------------------------+
-//| Quantum Feature Engine for the AK47 PURE AGENT EDITION.           |
+//| Quantum Feature Engine — v5.1 AUTO ADAPTIVE                      |
 //|                                                                   |
-//| This module is 100% self-contained. It replaces the removed      |
-//| neural-network module (AK47_AI.mqh) with a lightweight, purely    |
-//| quantitative feature extractor that feeds the Kilo API agent.     |
-//|                                                                   |
-//| It exposes:                                                       |
-//|   - StringTrim()          : trim helper                           |
-//|   - GetCurrentSession()   : trading session engine                |
-//|   - InitQuantumEngine()   : allocate per-symbol indicator handles |
-//|   - DeinitQuantumEngine() : release all handles                   |
-//|   - GetMarketFeatures()   : features[0..15]  (price/structure)    |
-//|   - GetQuantumFeatures()  : features[16..18] (entropy/memory/vol) |
+//| Auto-selects timeframe per symbol based on market regime.         |
+//| Auto-recreates indicator handles when timeframe changes.          |
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2026, AK47 Scalper EA"
 #property link      ""
-#property version   "5.00"
+#property version   "5.10"
 #property strict
 
-#define QUANTUM_MAX_SYMBOLS 8
+#define QUANTUM_MAX_SYMBOLS 12
 
 //+------------------------------------------------------------------+
 //| String helper                                                    |
@@ -43,32 +33,63 @@ SESSION_TYPE GetCurrentSession()
 {
    MqlDateTime dt;
    TimeCurrent(dt);
-   if(dt.day_of_week == 0 || dt.day_of_week == 6) return SESSION_OFF; // Weekend
-   int h = dt.hour; // Server time (GMT assumed)
+   if(dt.day_of_week == 0 || dt.day_of_week == 6) return SESSION_OFF;
+   int h = dt.hour;
    if(h >= 0 && h < 7)   return SESSION_ASIAN;
    if(h >= 7 && h < 13)  return SESSION_LONDON;
    if(h >= 13 && h < 21) return SESSION_NEWYORK;
    return SESSION_OFF;
 }
 
-string SessionToString(SESSION_TYPE s)
+//+------------------------------------------------------------------+
+//| Market Regime                                                    |
+//+------------------------------------------------------------------+
+enum MARKET_REGIME
 {
-   switch(s)
+   REGIME_TRENDING,
+   REGIME_RANGING,
+   REGIME_VOLATILE,
+   REGIME_CALM
+};
+
+//+------------------------------------------------------------------+
+//| Auto-select optimal timeframe based on market regime             |
+//+------------------------------------------------------------------+
+ENUM_TIMEFRAMES RegimeToTimeframe(MARKET_REGIME regime)
+{
+   switch(regime)
    {
-      case SESSION_ASIAN:   return "ASIAN";
-      case SESSION_LONDON:  return "LONDON";
-      case SESSION_NEWYORK: return "NEW YORK";
-      default:              return "OFF";
+      case REGIME_TRENDING: return PERIOD_H1;    // Higher TF for trend following
+      case REGIME_RANGING:  return PERIOD_M15;   // Lower TF for scalping ranges
+      case REGIME_VOLATILE: return PERIOD_M30;   // Medium TF during volatility
+      case REGIME_CALM:     return PERIOD_M5;    // Fast scalping in calm markets
    }
+   return PERIOD_M15;
+}
+
+string TimeframeToString(ENUM_TIMEFRAMES tf)
+{
+   switch(tf)
+   {
+      case PERIOD_M1:  return "M1";
+      case PERIOD_M5:  return "M5";
+      case PERIOD_M15: return "M15";
+      case PERIOD_M30: return "M30";
+      case PERIOD_H1:  return "H1";
+      case PERIOD_H4:  return "H4";
+      case PERIOD_D1:  return "D1";
+   }
+   return "M15";
 }
 
 //+------------------------------------------------------------------+
-//| Per-symbol indicator handle cache                                |
+//| Per-symbol indicator handle cache (timeframe-aware)              |
 //+------------------------------------------------------------------+
 struct QuantumHandles
 {
-   string symbol;
-   bool   ready;
+   string         symbol;
+   bool           ready;
+   ENUM_TIMEFRAMES timeframe;
    int    hRSI;
    int    hCCI;
    int    hMACD;
@@ -76,9 +97,12 @@ struct QuantumHandles
    int    hATR14;
    int    hATR50;
    int    hMA20;
+   int    hMA50;
+   int    hMA200;
    int    hMA1H;
    int    hMA4H;
    int    hBB;
+   int    hADX;
 };
 
 QuantumHandles g_qh[QUANTUM_MAX_SYMBOLS];
@@ -95,7 +119,7 @@ void InitQuantumEngine()
       g_qh[i].symbol = "";
       g_qh[i].ready  = false;
    }
-   Print("⚛️ Quantum Feature Engine initialized (lazy per-symbol handles)");
+   Print("Quantum Engine v5.1 AUTO ADAPTIVE initialized");
 }
 
 void ReleaseHandleSet(int idx)
@@ -108,9 +132,12 @@ void ReleaseHandleSet(int idx)
    if(g_qh[idx].hATR14 != INVALID_HANDLE) IndicatorRelease(g_qh[idx].hATR14);
    if(g_qh[idx].hATR50 != INVALID_HANDLE) IndicatorRelease(g_qh[idx].hATR50);
    if(g_qh[idx].hMA20  != INVALID_HANDLE) IndicatorRelease(g_qh[idx].hMA20);
+   if(g_qh[idx].hMA50  != INVALID_HANDLE) IndicatorRelease(g_qh[idx].hMA50);
+   if(g_qh[idx].hMA200 != INVALID_HANDLE) IndicatorRelease(g_qh[idx].hMA200);
    if(g_qh[idx].hMA1H  != INVALID_HANDLE) IndicatorRelease(g_qh[idx].hMA1H);
    if(g_qh[idx].hMA4H  != INVALID_HANDLE) IndicatorRelease(g_qh[idx].hMA4H);
    if(g_qh[idx].hBB    != INVALID_HANDLE) IndicatorRelease(g_qh[idx].hBB);
+   if(g_qh[idx].hADX   != INVALID_HANDLE) IndicatorRelease(g_qh[idx].hADX);
    g_qh[idx].ready = false;
 }
 
@@ -121,33 +148,80 @@ void DeinitQuantumEngine()
 }
 
 //+------------------------------------------------------------------+
-//| Resolve (and lazily create) the handle set for a symbol.         |
-//| Returns index into g_qh[], or -1 on failure.                     |
+//| Resolve handle set for a symbol + timeframe.                     |
+//| Returns index, or -1 on failure.                                 |
+//| If handles exist with wrong timeframe, they are re-created.      |
 //+------------------------------------------------------------------+
-int GetHandleSet(string symbol)
+int GetHandleSetEx(string symbol, ENUM_TIMEFRAMES tf)
 {
+   // Check existing handles
    for(int i=0; i<g_qhCount; i++)
-      if(g_qh[i].symbol == symbol && g_qh[i].ready) return i;
+   {
+      if(g_qh[i].symbol == symbol && g_qh[i].ready)
+      {
+         // Same symbol, check timeframe
+         if(g_qh[i].timeframe == tf) return i;
+         // Timeframe changed: release and recreate
+         if(g_qh[i].timeframe != tf)
+         {
+            Print("Quantum: timeframe change for ", symbol, " ",
+               TimeframeToString(g_qh[i].timeframe), "->", TimeframeToString(tf));
+            int idx = i;
+            ReleaseHandleSet(idx);
+            // Re-init this slot with new timeframe
+            QuantumHandles hset;
+            hset.symbol    = symbol;
+            hset.timeframe = tf;
+            hset.hRSI   = iRSI(symbol, tf, 14, PRICE_CLOSE);
+            hset.hCCI   = iCCI(symbol, tf, 20, PRICE_CLOSE);
+            hset.hMACD  = iMACD(symbol, tf, 12, 26, 9, PRICE_CLOSE);
+            hset.hStoch = iStochastic(symbol, tf, 5, 3, 3, MODE_SMA, STO_LOWHIGH);
+            hset.hATR14 = iATR(symbol, tf, 14);
+            hset.hATR50 = iATR(symbol, tf, 50);
+            hset.hMA20  = iMA(symbol, tf, 20, 0, MODE_SMA, PRICE_CLOSE);
+            hset.hMA50  = iMA(symbol, tf, 50, 0, MODE_SMA, PRICE_CLOSE);
+            hset.hMA200 = iMA(symbol, tf, 200, 0, MODE_SMA, PRICE_CLOSE);
+            hset.hMA1H  = iMA(symbol, PERIOD_H1, 50, 0, MODE_EMA, PRICE_CLOSE);
+            hset.hMA4H  = iMA(symbol, PERIOD_H4, 20, 0, MODE_EMA, PRICE_CLOSE);
+            hset.hBB    = iBands(symbol, tf, 20, 0, 2.0, PRICE_CLOSE);
+            hset.hADX   = iADX(symbol, tf, 14);
 
+            if(hset.hRSI == INVALID_HANDLE || hset.hATR14 == INVALID_HANDLE)
+            {
+               Print("Quantum: failed re-init for ", symbol);
+               return -1;
+            }
+            hset.ready = true;
+            g_qh[idx] = hset;
+            return idx;
+         }
+      }
+   }
+
+   // Create new
    if(g_qhCount >= QUANTUM_MAX_SYMBOLS) return -1;
 
    int idx = g_qhCount;
    QuantumHandles hset;
-   hset.symbol = symbol;
-   hset.hRSI   = iRSI(symbol, _Period, 14, PRICE_CLOSE);
-   hset.hCCI   = iCCI(symbol, _Period, 20, PRICE_CLOSE);
-   hset.hMACD  = iMACD(symbol, _Period, 12, 26, 9, PRICE_CLOSE);
-   hset.hStoch = iStochastic(symbol, _Period, 5, 3, 3, MODE_SMA, STO_LOWHIGH);
-   hset.hATR14 = iATR(symbol, _Period, 14);
-   hset.hATR50 = iATR(symbol, _Period, 50);
-   hset.hMA20  = iMA(symbol, _Period, 20, 0, MODE_SMA, PRICE_CLOSE);
+   hset.symbol    = symbol;
+   hset.timeframe = tf;
+   hset.hRSI   = iRSI(symbol, tf, 14, PRICE_CLOSE);
+   hset.hCCI   = iCCI(symbol, tf, 20, PRICE_CLOSE);
+   hset.hMACD  = iMACD(symbol, tf, 12, 26, 9, PRICE_CLOSE);
+   hset.hStoch = iStochastic(symbol, tf, 5, 3, 3, MODE_SMA, STO_LOWHIGH);
+   hset.hATR14 = iATR(symbol, tf, 14);
+   hset.hATR50 = iATR(symbol, tf, 50);
+   hset.hMA20  = iMA(symbol, tf, 20, 0, MODE_SMA, PRICE_CLOSE);
+   hset.hMA50  = iMA(symbol, tf, 50, 0, MODE_SMA, PRICE_CLOSE);
+   hset.hMA200 = iMA(symbol, tf, 200, 0, MODE_SMA, PRICE_CLOSE);
    hset.hMA1H  = iMA(symbol, PERIOD_H1, 50, 0, MODE_EMA, PRICE_CLOSE);
    hset.hMA4H  = iMA(symbol, PERIOD_H4, 20, 0, MODE_EMA, PRICE_CLOSE);
-   hset.hBB    = iBands(symbol, _Period, 20, 0, 2.0, PRICE_CLOSE);
+   hset.hBB    = iBands(symbol, tf, 20, 0, 2.0, PRICE_CLOSE);
+   hset.hADX   = iADX(symbol, tf, 14);
 
    if(hset.hRSI == INVALID_HANDLE || hset.hATR14 == INVALID_HANDLE)
    {
-      Print("⚠️ Quantum: failed to create indicators for ", symbol);
+      Print("Quantum: failed to create indicators for ", symbol);
       return -1;
    }
 
@@ -155,6 +229,12 @@ int GetHandleSet(string symbol)
    g_qh[idx]  = hset;
    g_qhCount++;
    return idx;
+}
+
+// Legacy overload for backward compat (uses _Period)
+int GetHandleSet(string symbol)
+{
+   return GetHandleSetEx(symbol, _Period);
 }
 
 //+------------------------------------------------------------------+
@@ -170,12 +250,12 @@ double QGetVal(int handle, int buffer=0, int shift=0)
 }
 
 //+------------------------------------------------------------------+
-//| Volume ratio: current bar volume vs recent average               |
+//| Volume ratio                                                     |
 //+------------------------------------------------------------------+
-double GetVolumeRatio(string symbol)
+double GetVolumeRatio(string symbol, ENUM_TIMEFRAMES tf)
 {
    long vol[];
-   if(CopyTickVolume(symbol, _Period, 0, 20, vol) < 20) return 1.0;
+   if(CopyTickVolume(symbol, tf, 0, 20, vol) < 20) return 1.0;
 
    double avgVol = 0.0;
    for(int i=1; i<20; i++) avgVol += (double)vol[i];
@@ -184,8 +264,10 @@ double GetVolumeRatio(string symbol)
    return (avgVol > 0.0) ? (double)vol[0] / avgVol : 1.0;
 }
 
+double GetVolumeRatio(string symbol) { return GetVolumeRatio(symbol, _Period); }
+
 //+------------------------------------------------------------------+
-//| % change over the last completed H1 candle                       |
+//| H1 % change                                                      |
 //+------------------------------------------------------------------+
 double GetSymbolChange(string sym)
 {
@@ -198,10 +280,7 @@ double GetSymbolChange(string sym)
 }
 
 //+------------------------------------------------------------------+
-//| Hurst exponent (market memory) via simplified R/S analysis       |
-//|   > 0.5 : persistent / trending                                  |
-//|   ~ 0.5 : random walk                                            |
-//|   < 0.5 : mean reverting                                         |
+//| Hurst exponent (R/S analysis)                                    |
 //+------------------------------------------------------------------+
 double CalculateHurstExponent(string symbol, int period)
 {
@@ -259,8 +338,7 @@ double CalculateHurstExponent(string symbol, int period)
 }
 
 //+------------------------------------------------------------------+
-//| Shannon entropy of the last N return signs (market uncertainty). |
-//| Returns 0.0 (fully ordered) .. 1.0 (maximum randomness).         |
+//| Shannon entropy                                                  |
 //+------------------------------------------------------------------+
 double CalculateReturnEntropy(string symbol, int period)
 {
@@ -287,36 +365,103 @@ double CalculateReturnEntropy(string symbol, int period)
    if(pUp   > 0.0) entropy -= pUp   * (MathLog(pUp)   / MathLog(2.0));
    if(pDown > 0.0) entropy -= pDown * (MathLog(pDown) / MathLog(2.0));
 
-   return MathMax(0.0, MathMin(1.0, entropy)); // Already in [0,1] for 2 outcomes
+   return MathMax(0.0, MathMin(1.0, entropy));
 }
 
 //+------------------------------------------------------------------+
-//| Current ATR(14) value in price terms for a symbol.               |
-//| MQL5-safe replacement for the legacy value-style iATR() call.    |
+//| Current ATR value (timeframe-aware)                              |
 //+------------------------------------------------------------------+
-double GetAtrValue(string symbol)
+double GetAtrValueEx(string symbol, ENUM_TIMEFRAMES tf)
 {
-   int h = GetHandleSet(symbol);
+   int h = GetHandleSetEx(symbol, tf);
    if(h < 0) return 0.0;
    return QGetVal(g_qh[h].hATR14);
 }
 
+double GetAtrValue(string symbol) { return GetAtrValueEx(symbol, _Period); }
+
 //+------------------------------------------------------------------+
-//| Feature Extraction (0..15) - price action + structure + swarm    |
+//| Market Regime Detection (timeframe-aware)                        |
 //+------------------------------------------------------------------+
-void GetMarketFeatures(string symbol, double &features[], string dxy, string sp500, string us10y, string btc)
+MARKET_REGIME DetectMarketRegimeEx(string symbol, ENUM_TIMEFRAMES tf)
 {
-   int h = GetHandleSet(symbol);
+   int h = GetHandleSetEx(symbol, tf);
+   if(h < 0) return REGIME_CALM;
+
+   double adxVal  = QGetVal(g_qh[h].hADX, 0);
+   double bbUpper = QGetVal(g_qh[h].hBB, 1);
+   double bbLower = QGetVal(g_qh[h].hBB, 2);
+   double bbMid   = QGetVal(g_qh[h].hBB, 0);
+   double atr14   = QGetVal(g_qh[h].hATR14);
+   double atr50   = QGetVal(g_qh[h].hATR50);
+   double point   = SymbolInfoDouble(symbol, SYMBOL_POINT);
+
+   double bbWidth = (bbMid > 0.0) ? (bbUpper - bbLower) / bbMid : 0.0;
+   double bbWidthNorm = bbWidth / (point * 100.0 + 0.0001);
+   double volRatio = (atr50 > 0.0) ? atr14 / atr50 : 1.0;
+
+   if(adxVal > 25.0 && bbWidthNorm > 0.5) return REGIME_TRENDING;
+   if(volRatio > 1.5 && bbWidthNorm > 1.0) return REGIME_VOLATILE;
+   if(adxVal < 20.0 && bbWidthNorm < 1.0) return REGIME_RANGING;
+   return REGIME_CALM;
+}
+
+MARKET_REGIME DetectMarketRegime(string symbol)
+{
+   return DetectMarketRegimeEx(symbol, _Period);
+}
+
+//+------------------------------------------------------------------+
+//| Session Quality Score                                            |
+//+------------------------------------------------------------------+
+double GetSessionQuality()
+{
+   MqlDateTime dt;
+   TimeCurrent(dt);
+   if(dt.day_of_week == 0 || dt.day_of_week == 6) return 0.1;
+
+   int h = dt.hour;
+   if(h >= 12 && h < 16)
+   {
+      if(h >= 13 && h < 14) return 1.0;
+      return 0.85;
+   }
+   if(h >= 7 && h < 12) return 0.75;
+   if(h >= 16 && h < 21) return 0.65;
+   if(h >= 0 && h < 7) return 0.50;
+   return 0.20;
+}
+
+//+------------------------------------------------------------------+
+//| Momentum                                                         |
+//+------------------------------------------------------------------+
+double CalculateMomentum(string symbol, int periods)
+{
+   MqlRates r[];
+   ArraySetAsSeries(r, true);
+   int n = CopyRates(symbol, _Period, 0, periods + 1, r);
+   if(n < periods + 1) return 0.0;
+
+   double mom = (r[0].close - r[periods].close) / (r[periods].close + 1e-9);
+   return MathMax(-1.0, MathMin(1.0, mom * 100.0));
+}
+
+//+------------------------------------------------------------------+
+//| Feature Extraction (timeframe-aware)                             |
+//+------------------------------------------------------------------+
+void GetMarketFeaturesEx(string symbol, double &features[], string dxy, string sp500, string us10y, string btc, ENUM_TIMEFRAMES tf)
+{
+   int h = GetHandleSetEx(symbol, tf);
    if(h < 0)
    {
-      for(int i=0; i<16; i++) features[i] = 0.5; // neutral fallback
+      for(int i=0; i<16; i++) features[i] = 0.5;
       return;
    }
    QuantumHandles hs = g_qh[h];
 
    MqlRates rates[];
    ArraySetAsSeries(rates, true);
-   if(CopyRates(symbol, _Period, 0, 2, rates) < 2)
+   if(CopyRates(symbol, tf, 0, 2, rates) < 2)
    {
       for(int i=0; i<16; i++) features[i] = 0.5;
       return;
@@ -326,7 +471,6 @@ void GetMarketFeatures(string symbol, double &features[], string dxy, string sp5
    if(point <= 0.0) point = _Point;
    double atr14 = QGetVal(hs.hATR14);
 
-   // M1 Price Action Features (0-7)
    features[0]  = (rates[0].close - rates[0].open) / (point * 10.0);
    features[1]  = (rates[0].high - rates[0].low) / (point * 10.0);
    features[2]  = (rates[0].close - rates[1].close) / (point * 10.0);
@@ -336,26 +480,36 @@ void GetMarketFeatures(string symbol, double &features[], string dxy, string sp5
    features[6]  = QGetVal(hs.hStoch) / 100.0;
    features[7]  = atr14 / (point * 100.0);
 
-   // Market Structure Features (8-11)
    features[8]  = (rates[0].close - QGetVal(hs.hMA20)) / (atr14 + 0.0001);
-   features[9]  = GetVolumeRatio(symbol) / 2.0;
+   features[9]  = GetVolumeRatio(symbol, tf) / 2.0;
    features[10] = (QGetVal(hs.hMA1H) - QGetVal(hs.hMA4H)) / (atr14 + 0.0001);
    features[11] = CalculateHurstExponent(symbol, 50);
 
-   // Swarm / Global Correlation Features (12-15)
    features[12] = GetSymbolChange(dxy) * 100.0 + 0.5;
    features[13] = GetSymbolChange(sp500) * 100.0 + 0.5;
-   features[14] = GetSymbolChange(us10y) * 100.0 + 0.5;
-   features[15] = GetSymbolChange(btc) * 100.0 + 0.5;
+
+   MARKET_REGIME regime = DetectMarketRegimeEx(symbol, tf);
+   double regimeVal = 0.5;
+   switch(regime)
+   {
+      case REGIME_TRENDING: regimeVal = 0.75; break;
+      case REGIME_RANGING:  regimeVal = 0.35; break;
+      case REGIME_VOLATILE: regimeVal = 0.90; break;
+      case REGIME_CALM:     regimeVal = 0.20; break;
+   }
+   features[14] = regimeVal;
+   features[15] = GetSessionQuality();
 
    for(int i=0; i<16; i++) features[i] = MathMax(0.0, MathMin(1.0, features[i]));
 }
 
+void GetMarketFeatures(string symbol, double &features[], string dxy, string sp500, string us10y, string btc)
+{
+   GetMarketFeaturesEx(symbol, features, dxy, sp500, us10y, btc, _Period);
+}
+
 //+------------------------------------------------------------------+
-//| Quantum Feature Layer (offset..offset+2)                         |
-//|   [offset+0] Return entropy   : market randomness                |
-//|   [offset+1] Market memory     : Hurst exponent                  |
-//|   [offset+2] Volatility regime : short vs long ATR compression   |
+//| Quantum Feature Layer                                            |
 //+------------------------------------------------------------------+
 void GetQuantumFeatures(string symbol, double &features[], int offset)
 {
@@ -372,8 +526,12 @@ void GetQuantumFeatures(string symbol, double &features[], int offset)
       if(atr50 > 0.0) volRegime = MathMax(0.0, MathMin(1.0, atr14 / (atr50 * 2.0)));
    }
 
+   double momentum = CalculateMomentum(symbol, 5);
+   double momNormalized = MathMax(0.0, MathMin(1.0, (momentum + 1.0) * 0.5));
+
    features[offset + 0] = entropy;
    features[offset + 1] = memory;
    features[offset + 2] = volRegime;
+   features[offset + 3] = momNormalized;
 }
 //+------------------------------------------------------------------+

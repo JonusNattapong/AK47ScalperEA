@@ -1,21 +1,30 @@
-# MetaTrader build outputs
+# Compiled MQL5 files
 *.ex5
-*.exp
+*.ex4
 
-# Compiler and runtime logs
+# Logs
 *.log
 compile_log.txt
-logs/
 
-# Local MetaEditor and IDE artifacts
-*.tmp
+# Backup files
 *.bak
-*.orig
 
-# OS artifacts
-Thumbs.db
-Desktop.ini
-
-# Editor settings
-.vscode/
+# IDE / editor
+.clew/
+.playwright-mcp/
 .idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Web testing artifacts
+web/
+graphify-out/
+
+# Project docs (not part of the EA code)
+AGENT.md
