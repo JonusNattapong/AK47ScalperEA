@@ -2,7 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
-## [5.0.0] - PURE AGENT EDITION (Current)
+## [5.1.0] - HIGH-RISK / AGGRESSIVE MODE (Current)
+### Added
+- **Aggressive position sizing (`CalculateAggressiveLot`):** Lot is sized from
+  `RiskPercentPerTrade`% of balance against the ATR stop distance, then amplified by
+  how far the AI confidence overshoots `EntryConfidence`. Clamped to `MaxLotCap` and
+  broker volume limits.
+- **Pyramiding:** `MaxPositionsPerSymbol` allows stacking multiple positions per symbol.
+- **New tunable inputs:** `AggressiveMode`, `RiskPercentPerTrade`, `AggressiveLotFactor`,
+  `MaxLotCap`, `EntryConfidence`, `MaxPositionsPerSymbol`, `ReentryCooldownSec`,
+  `AtrSlMultiplier`, `AtrTpMultiplier`.
+- **Dashboard:** shows HIGH-RISK banner, per-trade risk % and confidence gate.
+### Changed
+- Aggressive defaults: `MaxDailyDrawdown` 4%→15%, `DailyProfitTarget` 2.5%→10%,
+  `MaxOrdersTotal` 4→8, `MaxSpread` 35→45.
+- Entry gate lowered (confidence `0.82`→`EntryConfidence` 0.65) and re-entry cooldown
+  cut (`300s`→`ReentryCooldownSec` 60s) for higher trade frequency.
+- SL/TP now use `AtrSlMultiplier` (1.2, tighter) and `AtrTpMultiplier` (3.2, wider R:R).
+### Note
+- ⚠️ This is a high-risk configuration and can produce large drawdowns. Set
+  `AggressiveMode = false` to fall back to fixed `LotSize` and conservative behaviour.
+
+## [5.0.0] - PURE AGENT EDITION
 ### Added
 - **Quantum Feature Engine (`AK47_Quantum.mqh`):** New self-contained, neural-network-free
   feature extractor that feeds the Kilo API agent. Provides per-symbol price-action,
