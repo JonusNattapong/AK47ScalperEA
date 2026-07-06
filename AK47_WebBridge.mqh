@@ -224,6 +224,21 @@ bool WebBridgeFetchStrategy(double &lotSize, double &maxDD, double &dailyTarget,
 }
 
 //+------------------------------------------------------------------+
+//| Fetch Paused State from Web Dashboard                            |
+//+------------------------------------------------------------------+
+bool WebBridgeFetchIsPaused()
+{
+   if(!g_webEnabled) return false;
+
+   string response = WebBridgeGet("/api/state");
+   if(response == "") return false;
+
+   string pausedStr = ExtractJson(response, "is_global_paused");
+   return (pausedStr == "1" || pausedStr == "true");
+}
+
+
+//+------------------------------------------------------------------+
 //| Simple JSON field extractor (no dependencies)                    |
 //+------------------------------------------------------------------+
 string ExtractJson(string json, string key)

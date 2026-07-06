@@ -12,6 +12,7 @@
 #include <Trade\Trade.mqh>
 #include "AK47_News.mqh"
 #include "AK47_Quantum.mqh"
+#include "AK47_WebBridge.mqh"
 
 // EA Settings (set once via properties window, overridable via dashboard)
 input double LotSize           = 0.01;
@@ -40,6 +41,11 @@ input bool   Allow247          = true;    // Allow trading on weekends & all hou
 input string TradingSymbols    = "XAUUSD,EURUSD,GBPUSD,USDJPY";
 input int    TrailingStart     = 100;
 input int    TrailingStop      = 30;
+
+// --- Web Console Dashboard Bridge ---
+input bool   WebBridge_Enabled  = true;          // Enable Web Console Dashboard
+input string WebBridge_Host     = "127.0.0.1";    // Web Console Host
+input int    WebBridge_Port     = 3000;           // Web Console Port
 
 // --- TinyFish News Context ---
 input string TinyFish_ApiKey       = "";       // empty = disabled
@@ -243,6 +249,16 @@ int OnInit()
    // Initial calendar scan
    ScanEconomicCalendar();
 
+   // Init Web Bridge
+   if(WebBridge_Enabled)
+   {
+      WebBridgeEnable(WebBridge_Host, WebBridge_Port);
+   }
+   else
+   {
+      WebBridgeDisable();
+   }
+
    CreateDashboardObjects();
    UpdateDashboard();
 
@@ -268,6 +284,59 @@ void OnTick()
 {
    UpdateDashboard();
    TrackClosedPositions();
+
+   // --- Web Bridge Sync ---
+   if(WebBridgeIsEnabled())
+   {
+      // 1. Fetch paused state from dashboard
+      bool remotePaused = WebBridgeFetchIsPaused();
+      if(remotePaused != isGlobalDisabled)
+      {
+         isGlobalDisabled = remotePaused;
+         Print("WebBridge: paused state updated remotely -> ", isGlobalDisabled ? "PAUSED" : "RUNNING");
+      }
+      
+      // 2. Fetch strategy configurations
+      static datetime lastStrategyFetch = 0;
+      if(TimeCurrent() > lastStrategyFetch + 10)
+      {
+         double lot = g_config.lotSize;
+         double maxDD = g_config.maxDailyDrawdown;
+         double dailyTarget = g_config.dailyProfitTarget;
+         int maxOrd = g_config.maxOrdersTotal;
+         int maxSpr = g_config.maxSpread;
+         double minConf = g_config.riskConfidence;
+         
+         if(WebBridgeFetchStrategy(lot, maxDD, dailyTarget, maxOrd, maxSpr, minConf))
+         {
+            g_config.lotSize = lot;
+            g_config.maxDailyDrawdown = maxDD;
+            g_config.dailyProfitTarget = dailyTarget;
+            g_config.maxOrdersTotal = maxOrd;
+            g_config.maxSpread = maxSpr;
+            g_config.riskConfidence = minConf;
+         }
+         lastStrategyFetch = TimeCurrent();
+      }
+
+      // 3. Send current state to dashboard
+      double currentEquity = AccountInfoDouble(ACCOUNT_EQUITY);
+      double profitPercent = 0.0;
+      if(dailyStartBalance > 0)
+         profitPercent = ((currentEquity - dailyStartBalance) / dailyStartBalance) * 100.0;
+      
+      WebBridgeSendState(
+         AccountInfoDouble(ACCOUNT_BALANCE),
+         currentEquity,
+         currentEquity - dailyStartBalance,
+         profitPercent,
+         PositionsTotalMagic(),
+         g_config.maxOrdersTotal,
+         isGlobalDisabled,
+         isGlobalDisabled ? "PAUSED" : "RUNNING"
+      );
+   }
+
    if(isGlobalDisabled) return;
 
    // Daily calendar refresh
@@ -417,6 +486,11 @@ void OnTick()
          g_symbols[i].lastAction = newsAi.GetAction();
          g_symbols[i].lastConfidence = newsAi.GetConfidence();
          g_symbols[i].lastInsight = newsAi.GetInsight();
+
+         if(WebBridgeIsEnabled())
+         {
+            WebBridgeSendSignal(g_symbols[i].symbol, g_symbols[i].magicNumber, g_symbols[i].lastAction, g_symbols[i].lastConfidence, g_symbols[i].lastInsight);
+         }
       }
 
       // Execute Agent Order - AI BROKER MODE
@@ -1410,6 +1484,12 @@ void TrackClosedPositions()
          Print("Trade result [", g_symbols[s].symbol, "]: PnL=", profit,
                " Wins=", g_symbols[s].totalWins, " Losses=", g_symbols[s].totalLosses,
                " Consec=", g_symbols[s].consecutiveLosses);
+
+         if(WebBridgeIsEnabled())
+         {
+            ulong posTicket = (ulong)HistoryDealGetInteger(dealTicket, DEAL_POSITION_ID);
+            WebBridgeClosePosition(posTicket, profit);
+         }
          break;
       }
    }
@@ -1496,6 +1576,26 @@ void ManagePositions()
             if(currentSL == 0 || newSL < currentSL - 10 * point)
                trade.PositionModify(ticket, newSL, currentTP);
          }
+      }
+
+      // Send position info to Web Dashboard
+      if(WebBridgeIsEnabled())
+      {
+         string posTypeStr = (posType == POSITION_TYPE_BUY) ? "BUY" : "SELL";
+         string openTimeStr = TimeToString((datetime)PositionGetInteger(POSITION_TIME), TIME_DATE|TIME_MINUTES);
+         WebBridgeSendPosition(
+            ticket,
+            sym,
+            posTypeStr,
+            PositionGetDouble(POSITION_VOLUME),
+            openPrice,
+            currentSL,
+            currentTP,
+            PositionGetDouble(POSITION_PROFIT),
+            openTimeStr,
+            magic,
+            PositionGetString(POSITION_COMMENT)
+         );
       }
    }
 }
