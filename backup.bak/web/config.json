@@ -1,0 +1,28 @@
+{
+  "provider": "kilo",
+  "kilo": {
+    "apiKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbnYiOiJwcm9kdWN0aW9uIiwia2lsb1VzZXJJZCI6IjZjN2IzMGU1LWU4NTItNDA4My1iZDIyLTE4NDkyODM2MTZlZCIsImFwaVRva2VuUGVwcGVyIjpudWxsLCJ2ZXJzaW9uIjozLCJpYXQiOjE3ODMzMTkwNzgsImV4cCI6MTk0MDk5OTA3OH0.AE0n5ucqFrsrZyScWM3hQkok0IrX8cxhsNPCjqenXnI",
+    "apiUrl": "https://api.kilo.ai/api/gateway/chat/completions",
+    "model": "kilo-auto/free"
+  },
+  "openai": {
+    "apiKey": "",
+    "apiUrl": "https://api.openai.com/v1/chat/completions",
+    "model": "gpt-4o"
+  },
+  "ollama": {
+    "apiUrl": "http://localhost:11434/v1/chat/completions",
+    "model": "llama3"
+  },
+  "deepseek": {
+    "apiKey": "",
+    "apiUrl": "https://api.deepseek.com/v1/chat/completions",
+    "model": "deepseek-chat"
+  },
+  "settings": {
+    "temperature": 0.2,
+    "maxTokens": 500,
+    "apiInterval": 15,
+    "minConfidence": 0.82
+  }
+}
