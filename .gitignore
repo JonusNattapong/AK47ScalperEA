@@ -28,3 +28,6 @@ graphify-out/
 
 # Project docs (not part of the EA code)
 AGENT.md
+
+# Backup directory
+backup.bak/
